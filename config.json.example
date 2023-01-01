@@ -19,5 +19,17 @@
 			"db": "MYSQL_DB",
 			"dbTable": "MYSQL_TABLE"
 		}
-	]
+	],
+    "events": [
+        {
+            "guild": "DISCORD_GUILD",
+            "creatorMode": 2,
+			"dbHost": "MYSQL_HOST",
+			"dbPort": "3306",
+			"dbUser": "MYSQL_USER",
+			"dbPassword": "MYSQL_PASSWORD",
+			"db": "MYSQL_DB",
+			"dbTable": "MYSQL_TABLE"
+        }
+    ]
 }

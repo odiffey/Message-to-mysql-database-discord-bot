@@ -1,13 +1,26 @@
-const { Client, GatewayIntentBits, REST, Routes, Events, PermissionFlagsBits } = require('discord.js');
+const {
+	Client,
+	GatewayIntentBits,
+	REST,
+	Routes,
+	Events,
+	PermissionFlagsBits,
+	Partials,
+	GuildScheduledEventStatus
+} = require('discord.js');
 const mysql = require('mysql');
 
 const client = new Client({
 	intents: [
 		GatewayIntentBits.Guilds,
 		GatewayIntentBits.MessageContent,
-		GatewayIntentBits.GuildMessages
+		GatewayIntentBits.GuildMessages,
+		GatewayIntentBits.GuildScheduledEvents
 	],
-	partials: ['MESSAGE', 'CHANNEL', 'REACTION']
+	partials: [
+		Partials.GuildScheduledEvent,
+		Partials.Message
+	]
 });
 
 const config = require('./config.json');
@@ -44,6 +57,11 @@ const registerCommands = async () => {
 							}
 						],
 						default_member_permissions: PermissionFlagsBits.ManageGuild.toString()
+					},
+					{
+						name: 'refresh_events',
+						description: 'Refresh scheduled events',
+						default_member_permissions: PermissionFlagsBits.ManageEvents.toString()
 					}
 				]
 			}
@@ -234,12 +252,145 @@ const deleteMessage = (message, channel) => {
 		connection.query(
 			`DELETE FROM ${channel.dbTable} WHERE id=${message.id}`,
 			error => {
-				connection.end();
 				if (error) reject(error);
 				else resolve();
 			}
 		);
+
+		connection.end();
 	});
+};
+
+const storeEvents = (events, eventConfig) => {
+	return new Promise((resolve, reject) => {
+		const connection = mysql.createConnection({
+			host: eventConfig.dbHost,
+			port: eventConfig.dbPort,
+			user: eventConfig.dbUser,
+			password: eventConfig.dbPassword,
+			database: eventConfig.db,
+			charset: 'utf8mb4',
+			collation: 'utf8mb4_unicode_ci'
+		});
+		connection.connect();
+
+		connection.query(
+			`SELECT id FROM ${eventConfig.dbTable}`,
+			(error, results) => {
+				if (error) throw error;
+
+				let expired = results.map(result => result.id);
+
+				Promise.all(
+					events.map(event => {
+						return new Promise((_resolve, _reject) => {
+							const result = results.find(result => result.id === event.id);
+							const active = event.status === GuildScheduledEventStatus.Active || event.status === GuildScheduledEventStatus.Scheduled;
+							
+							let query;
+							if (!result && active)
+								query = `INSERT INTO ${eventConfig.dbTable} SET ?`;
+							else if (result && active) {
+								expired = expired.filter(id => id !== event.id);
+								query = `UPDATE ${eventConfig.dbTable} SET ? WHERE id=${event.id}`;
+							}
+
+							if (query)
+								client.users.fetch(event.creatorId).then(creator => {
+									switch (eventConfig.creatorMode) {
+									case 0: {
+										creator = creator.id;
+										break;
+									}
+									case 1: {
+										creator = creator.username;
+										break;
+									}
+									default: {
+										creator = creator.tag;
+										break;
+									}
+									}
+
+									connection.query(
+										query,
+										[{
+											id: event.id,
+											name: event.name,
+											description: event.description,
+											creator,
+											location: event.entityMetadata ? event.entityMetadata.location : undefined,
+											image: event.image,
+											starts_at: new Date(event.scheduledStartTimestamp),
+											ends_at: event.scheduledEndTimestamp ? new Date(event.scheduledEndTimestamp) : undefined
+										}],
+										error => {
+											if (error) _reject(error);
+											else _resolve();
+										}
+									);
+								});
+							else _resolve();
+						});
+					})
+				).then(async () => {
+					await Promise.all(expired.map(id => deleteEvent({ id }, eventConfig)));
+					connection.end();
+					resolve();
+				}).catch(err => {
+					reject(err);
+				});
+			}
+		);
+	});
+};
+
+const deleteEvent = (event, eventConfig) => {
+	return new Promise((resolve, reject) => {
+		const connection = mysql.createConnection({
+			host: eventConfig.dbHost,
+			port: eventConfig.dbPort,
+			user: eventConfig.dbUser,
+			password: eventConfig.dbPassword,
+			database: eventConfig.db,
+			charset: 'utf8mb4',
+			collation: 'utf8mb4_unicode_ci'
+		});
+		connection.connect();
+	
+		connection.query(
+			`DELETE FROM ${eventConfig.dbTable} WHERE id=${event.id}`,
+			error => {
+				if (error) reject(error);
+				else resolve();
+			}
+		);
+
+		connection.end();
+	});
+};
+
+const refreshEvents = async (guildId) => {
+	let guilds = await client.guilds.fetch();
+
+	if (guildId) guilds = guilds.filter(guild => guild.id === guildId);
+
+	await Promise.all(
+		guilds.map(guild => {
+			return new Promise(resolve => {
+				const eventConfig = config.events.find(
+					event => event.guild === guild.id
+				);
+				if (eventConfig)
+					guild.fetch().then(async _guild => {
+						const events = await _guild.scheduledEvents.fetch();
+						await storeEvents(events, eventConfig);
+						resolve();
+					});
+				else resolve();
+			});
+		})
+	);
 };
 
 client.on('ready', () => {
@@ -310,6 +461,47 @@ client.on('interactionCreate', async interaction => {
 		});
 		break;
 	}
+	case 'refresh_events': {
+		if (!config.admins.includes(interaction.user.id)) {
+			await interaction.reply({
+				content: 'You do not have permission to refresh events',
+				ephemeral: true
+			});
+			break;
+		}
+	
+		await interaction.reply({
+			content: 'Starting to refresh events',
+			ephemeral: true
+		});
+
+		const eventConfig = config.events.find(
+			event => event.guild === interaction.guildId
+		);
+		if (!eventConfig) {
+			await interaction.followUp({
+				content: 'Guild not configured for events',
+				ephemeral: true
+			});
+			break;
+		}
+
+		try {
+			await refreshEvents(interaction.guildId);
+		} catch (error) {
+			await interaction.followUp({
+				content: 'Error refreshing events',
+				ephemeral: true
+			});
+			throw error;
+		}
+
+		await interaction.followUp({
+			content: 'Successfully refreshed events',
+			ephemeral: true
+		});
+		break;
+	}
 	default: {
 		await interaction.reply({ content: 'Unknown command', ephemeral: true });
 	}
@@ -317,29 +509,53 @@ client.on('interactionCreate', async interaction => {
 });
 
 client.on(Events.MessageCreate, async message => {
-	if (message.partial) await message.fetch();
+	if (message.partial) message = await message.fetch();
 	const channel = config.channels.find(
 		({ id }) => id === message.channelId
 	);
-	await storeMessages([message], channel);
+	if (channel) await storeMessages([message], channel);
 });
 
 client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
-	if (newMessage.partial) await newMessage.fetch();
+	if (newMessage.partial) newMessage = await newMessage.fetch();
 	const channel = config.channels.find(
 		({ id }) => id === newMessage.channelId
 	);
-	await storeMessages([newMessage], channel);
+	if (channel) await storeMessages([newMessage], channel);
 });
 
 client.on(Events.MessageDelete, async message => {
-	if (message.partial) await message.fetch();
 	const channel = config.channels.find(
 		({ id }) => id === message.channelId
 	);
-	await deleteMessage(message, channel);
+	if (channel) await deleteMessage(message, channel);
+});
+
+client.on(Events.GuildScheduledEventCreate, async event => {
+	if (event.partial) event = await event.fetch();
+	const eventConfig = config.events.find(
+		({ guild }) => guild === event.guildId
+	);
+	if (eventConfig) await storeEvents([event], eventConfig);
+});
+
+client.on(Events.GuildScheduledEventUpdate, async (oldEvent, newEvent) => {
+	if (newEvent.partial) newEvent = await newEvent.fetch();
+	const eventConfig = config.events.find(
+		({ guild }) => guild === newEvent.guildId
+	);
+	if (eventConfig) await storeEvents([newEvent], eventConfig);
+});
+
+client.on(Events.GuildScheduledEventDelete, async event => {
+	const eventConfig = config.events.find(
+		({ guild }) => guild === event.guildId
+	);
+	if (eventConfig) await deleteEvent(event, eventConfig);
 });
 
 registerCommands();
 
-client.login(config.token);
+client.login(config.token).then(async () => {
+	await refreshEvents();
+});
