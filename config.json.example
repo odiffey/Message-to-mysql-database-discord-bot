@@ -1,16 +1,17 @@
 {
+	"clientId": "",
 	"token": "DISCORD_TOKEN",
-	"prefix": "!",
 	"playing": "Linking...",
-	"godMode": [],
-	"servers": [
+	"admins": [],
+	"channels": [
 		{
-			"channel": "DISCORD_CHANNEL",
-			"userMentionsMode": "2",
-			"channelMentionsMode":"1",
-			"roleMentionsMode": "2",
-			"authorMode": "2",
+			"id": "DISCORD_CHANNEL",
+			"userMentionsMode": 3,
+			"channelMentionsMode": 1,
+			"roleMentionsMode": 2,
+			"authorMode": 2,
 			"allowBots": false,
+			"allowDump": true,
 			"dbHost": "MYSQL_HOST",
 			"dbPort": "3306",
 			"dbUser": "MYSQL_USER",
