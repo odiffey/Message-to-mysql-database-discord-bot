@@ -34,10 +34,10 @@ The purpose of this bot is to dump the messages sent in a chat channel of discor
   |`admins`|Array of user IDs who will be able to use the special commands|
   |`channels`|Array of configured channels|
   |`channels.id`|ID of Discord channel to listen to|
-  |`channels.userMentionsMode`| Conversion settings for user mentions in Discord messages. 0 will set as the user ID, e.g. `@182925154211332097`. 1 will set as just the username, e.g. `@Owen`. ~~2 will set as just the in-server nickname, e.g. `@Not Owen`~~. 3 will set as the username + discriminator, e.g. `@Owen#1111` 4 will set as the user ID plus end marker, e.g. `@182925154211332097@`. ~~5~~Anything else will set as just the username plus end marker, e.g. `@Owen@`. ~~Anything else will set as just the in-server nickname plus end marker e.g. `@Not Owen@`.~~|
-  |`channels.channelMentionsMode`| Conversion settings for channel mentions in Discord messages. 0 will set as the channel ID, e.g. `#224558110868635658`. 1 will set as the name, e.g. `#rules`. 2 will set the id in between two hastag, e.g. `#224558110868635658#`. Anything else will the channel name between two hastag, e.g. `#rules#`.|
-  |`channels.roleMentionsMode`| Conversion settings for role mentions in Discord messages. 0 will set as the role ID, e.g. `&677081843086000128`. 1 will set as just the name of the role, e.g. `&foo`. Anything else will set as the name + color in hex, e.g. `&foo#ffffff`|
-  |`channels.authorMode`|Conversion settings for the author of the message. 0 will set as the user ID, e.g. `@182925154211332097`. 1 will set as just the username, e.g. `@Owen`. 2 will set as the username + discriminator, e.g. `@Owen#1111`. Anything will set just the in-server nickname, e.g. `@Not Owen`.|
+  |`channels.userMentionsMode`| Conversion settings for user mentions in Discord messages. 0 will set as the user ID, e.g. `@182925154211332097`. 1 will set as just the username, e.g. `@Owen`. ~~2 will set as just the in-server nickname, e.g. `@Not Owen`~~. 3 will set as the username + discriminator, e.g. `@Owen#1111` 4 will set as the user ID plus end marker, e.g. `@182925154211332097@`. 5 will set as just the username plus end marker, e.g. `@Owen@`. ~~Anything else will set as just the in-server nickname plus end marker e.g. `@Not Owen@`.~~Anything else will not convert.|
+  |`channels.channelMentionsMode`| Conversion settings for channel mentions in Discord messages. 0 will set as the channel ID, e.g. `#224558110868635658`. 1 will set as the name, e.g. `#rules`. 2 will set the id in between two hastag, e.g. `#224558110868635658#`. 3 will the channel name between two hastag, e.g. `#rules#`. Anything else will not convert.|
+  |`channels.roleMentionsMode`| Conversion settings for role mentions in Discord messages. 0 will set as the role ID, e.g. `&677081843086000128`. 1 will set as just the name of the role, e.g. `&foo`. 2 will set as the name + color in hex, e.g. `&foo#ffffff`. Anything else will not convert.|
+  |`channels.authorMode`|Conversion settings for the author of the message. 0 will set as the user ID, e.g. `@182925154211332097`. 1 will set as just the username, e.g. `@Owen`. 2 will set as the username + discriminator, e.g. `@Owen#1111`. 3 set just the in-server nickname, e.g. `@Not Owen`. Anything else will not convert.|
   |`channels.allowBots`|Filters out bot messages if false |
   |`channels.allowDump`|Toggle dumping in a channel|
   |`channels.dbHost`|MySQL database host|
@@ -71,7 +71,8 @@ CREATE TABLE `TABLE_NAME` (
   `author` text NOT NULL,
   `images` text NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `edited_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `edited_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `mentions` text NOT NULL
 ) COLLATE 'utf8mb4_unicode_ci';
 ```
 

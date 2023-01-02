@@ -97,34 +97,41 @@ const prepareMessage = (message, channel) => {
 				content = replace(`@${user.id}@`);
 				break;
 			}
-			default: {
+			case 5: {
 				content = replace(`@${user.username}@`);
+				break;
+			}
+			default: {
 				break;
 			}
 			}
 		});
 
-		mentions.channels.forEach(channel => {
+		mentions.channels.forEach(mention => {
 			const replace = format =>
 				content.replace(
-					new RegExp(`<#!?${channel.id}>`, 'g'),
+					new RegExp(`<#!?${mention.id}>`, 'g'),
 					format
 				);
 			switch (channel.channelMentionsMode) {
 			case 0: {
-				content = replace(`#${channel.id}`);
+				content = replace(`#${mention.id}`);
 				break;
 			}
 			case 1: {
-				content = replace(`#${channel.name}`);
+				content = replace(`#${mention.name}`);
 				break;
 			}
 			case 2: {
-				content = replace(`#${channel.id}#`);
+				content = replace(`#${mention.id}#`);
+				break;
+			}
+			case 3: {
+				content = replace(`#${mention.name}#`);
 				break;
 			}
 			default: {
-				content = replace(`#${channel.name}#`);
+				break;
 			}
 			}
 		});
@@ -144,8 +151,12 @@ const prepareMessage = (message, channel) => {
 				content = replace(`&${role.name}`);
 				break;
 			}
-			default: {
+			case 2: {
 				content = replace(`&${role.name}#${role.color.toString(16)}`);
+				break;
+			}
+			default: {
+				break;
 			}
 			}
 		});
@@ -163,10 +174,32 @@ const prepareMessage = (message, channel) => {
 			author = author.tag;
 			break;
 		}
-		default: {
+		case 3: {
 			author = message.member.nickname || author.username;
+			break;
+		}
+		default: {
+			break;
 		}
 		}
+
+		const mentionsExport = {
+			users: mentions.users.map(
+				({ id, tag }) => ({ id, username: tag })
+			),
+			channels: mentions.channels.map(
+				({ id, name }) => ({ id, name })
+			),
+			roles: mentions.roles.map(
+				({ id, name, color }) =>
+					({ id, name, color: color.toString(16) })
+			)
+		};
+		if (! mentionsExport.users.find(user => user.id === author.id))
+			mentionsExport.users.push({
+				id: author.id,
+				username: author.tag
+			});
 
 		resolve({
 			id: message.id,
@@ -176,7 +209,8 @@ const prepareMessage = (message, channel) => {
 				message.attachments.map(attachment => attachment.url)
 			),
 			created_at: new Date(message.createdTimestamp),
-			edited_at: new Date(message.editedTimestamp)
+			edited_at: new Date(message.editedTimestamp),
+			mentions: JSON.stringify(mentionsExport)
 		});
 	});
 };
@@ -261,7 +295,7 @@ const deleteMessage = (message, channel) => {
 	});
 };
 
-const storeEvents = (events, eventConfig) => {
+const storeEvents = (events, eventConfig, cleanup=false) => {
 	return new Promise((resolve, reject) => {
 		const connection = mysql.createConnection({
 			host: eventConfig.dbHost,
@@ -274,8 +308,16 @@ const storeEvents = (events, eventConfig) => {
 		});
 		connection.connect();
 
+		let query = `SELECT id FROM ${eventConfig.dbTable}`;
+		const params = [];
+		if (!cleanup) {
+			query += ' WHERE id IN (?)';
+			params.push(events.map(event => event.id));
+		}
+
 		connection.query(
-			`SELECT id FROM ${eventConfig.dbTable}`,
+			query,
+			params,
 			(error, results) => {
 				if (error) throw error;
 
@@ -384,7 +426,7 @@ const refreshEvents = async (guildId) => {
 				if (eventConfig)
 					guild.fetch().then(async _guild => {
 						const events = await _guild.scheduledEvents.fetch();
-						await storeEvents(events, eventConfig);
+						await storeEvents(events, eventConfig, true);
 						resolve();
 					});
 				else resolve();
